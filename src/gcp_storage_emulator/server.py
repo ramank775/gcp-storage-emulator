@@ -21,6 +21,7 @@ POST = "POST"
 PUT = "PUT"
 DELETE = "DELETE"
 PATCH = "PATCH"
+OPTIONS = "OPTIONS"
 
 
 def _wipe_data(req, res, storage):
@@ -38,64 +39,81 @@ def _health_check(req, res, storage):
     res.write("OK")
 
 
+def _options(req, res, storage):
+    res.status = HTTPStatus.NO_CONTENT
+
+
 HANDLERS = (
-    (r"^{}/b$".format(settings.API_ENDPOINT), {GET: buckets.ls, POST: buckets.insert}),
+    (
+        r"^{}/b$".format(settings.API_ENDPOINT),
+        {GET: buckets.ls, POST: buckets.insert, OPTIONS: _options},
+    ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)$".format(settings.API_ENDPOINT),
-        {GET: buckets.get, DELETE: buckets.delete},
+        {GET: buckets.get, DELETE: buckets.delete, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o$".format(settings.API_ENDPOINT),
-        {GET: objects.ls},
+        {GET: objects.ls, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o/(?P<object_id>.*[^/]+)/copyTo/b/".format(
             settings.API_ENDPOINT
         )
         + r"(?P<dest_bucket_name>[-.\w]+)/o/(?P<dest_object_id>.*[^/]+)$",
-        {POST: objects.copy},
+        {POST: objects.copy, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o/(?P<object_id>.*[^/]+)/rewriteTo/b/".format(
             settings.API_ENDPOINT
         )
         + r"(?P<dest_bucket_name>[-.\w]+)/o/(?P<dest_object_id>.*[^/]+)$",
-        {POST: objects.rewrite},
+        {POST: objects.rewrite, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o/(?P<object_id>.*[^/]+)/compose$".format(
             settings.API_ENDPOINT
         ),
-        {POST: objects.compose},
+        {POST: objects.compose, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o/(?P<object_id>.*[^/]+)$".format(
             settings.API_ENDPOINT
         ),
-        {GET: objects.get, DELETE: objects.delete, PATCH: objects.patch},
+        {
+            GET: objects.get,
+            DELETE: objects.delete,
+            PATCH: objects.patch,
+            OPTIONS: _options,
+        },
     ),
     # Non-default API endpoints
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o$".format(settings.UPLOAD_API_ENDPOINT),
-        {POST: objects.insert, PUT: objects.upload_partial},
+        {POST: objects.insert, PUT: objects.upload_partial, OPTIONS: _options},
     ),
     (
         r"^{}/b/(?P<bucket_name>[-.\w]+)/o/(?P<object_id>.*[^/]+)$".format(
             settings.DOWNLOAD_API_ENDPOINT
         ),
-        {GET: objects.download},
+        {GET: objects.download, OPTIONS: _options},
     ),
     (
         r"^{}$".format(settings.BATCH_API_ENDPOINT),
-        {POST: objects.batch},
+        {POST: objects.batch, OPTIONS: _options},
     ),
     # Internal API, not supported by the real GCS
-    (r"^/$", {GET: _health_check}),  # Health check endpoint
+    (r"^/$", {GET: _health_check, OPTIONS: _options}),  # Health check endpoint
     (r"^/wipe$", {GET: _wipe_data}),  # Wipe all data
     # Public file serving, same as object.download and signed URLs
     (
         r"^/(?P<bucket_name>[-.\w]+)/(?P<object_id>.*[^/]+)$",
-        {GET: objects.download, PUT: objects.xml_upload},
+        {
+            GET: objects.download,
+            POST: objects.xml_upload,
+            PUT: objects.xml_upload,
+            OPTIONS: _options,
+        },
     ),
 )
 
@@ -298,6 +316,15 @@ class Response(object):
     def __getitem__(self, key):
         return self._headers[key]
 
+    def setCORSHeaders(
+        self, origin="*", headers="*", methods="GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    ):
+        self["Allow"] = "OPTIONS, GET, POST, PUT, DELETE, PATCH"
+        self["Access-Control-Allow-Origin"] = origin
+        self["Access-Control-Allow-Methods"] = methods
+        self["Access-Control-Allow-Headers"] = headers
+        self["Vary"] = "Origin"
+
     def close(self):
         self._handler.send_response(self.status.value, self.status.phrase)
         for k, v in self._headers.items():
@@ -348,13 +375,15 @@ class Router(object):
                 "Method not implemented: {} - {}".format(request.method, request.path)
             )
             response.status = HTTPStatus.NOT_IMPLEMENTED
-
+        if self._request_handler.cors:
+            response.setCORSHeaders(origin=request.get_header("origin", "*"))
         response.close()
 
 
 class RequestHandler(server.BaseHTTPRequestHandler):
-    def __init__(self, storage, *args, **kwargs):
+    def __init__(self, storage, cors, *args, **kwargs):
         self.storage = storage
+        self.cors = cors
         super().__init__(*args, **kwargs)
 
     def do_GET(self):
@@ -377,12 +406,16 @@ class RequestHandler(server.BaseHTTPRequestHandler):
         router = Router(self)
         router.handle(PATCH)
 
+    def do_OPTIONS(self):
+        router = Router(self)
+        router.handle(OPTIONS)
+
     def log_message(self, format, *args):
         logger.info(format % args)
 
 
 class APIThread(threading.Thread):
-    def __init__(self, host, port, storage, *args, **kwargs):
+    def __init__(self, host, port, storage, cors, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._host = host
@@ -390,10 +423,11 @@ class APIThread(threading.Thread):
         self.is_running = threading.Event()
         self._httpd = None
         self._storage = storage
+        self._cors = cors
 
     def run(self):
         self._httpd = server.HTTPServer(
-            (self._host, self._port), partial(RequestHandler, self._storage)
+            (self._host, self._port), partial(RequestHandler, self._storage, self._cors)
         )
         self.is_running.set()
         self._httpd.serve_forever()
@@ -407,12 +441,14 @@ class APIThread(threading.Thread):
 
 
 class Server(object):
-    def __init__(self, host, port, in_memory, default_bucket=None, data_dir=None):
+    def __init__(
+        self, host, port, in_memory, default_bucket=None, data_dir=None, cors=False
+    ):
         self._storage = Storage(use_memory_fs=in_memory, data_dir=data_dir)
         if default_bucket:
             logger.debug('[SERVER] Creating default bucket "{}"'.format(default_bucket))
             buckets.create_bucket(default_bucket, self._storage)
-        self._api = APIThread(host, port, self._storage)
+        self._api = APIThread(host, port, self._storage, cors)
 
     # Context Manager
     def __enter__(self):
@@ -448,7 +484,9 @@ class Server(object):
             self.stop()
 
 
-def create_server(host, port, in_memory=False, default_bucket=None, data_dir=None):
+def create_server(
+    host, port, in_memory=False, default_bucket=None, data_dir=None, cors=False
+):
     logger.info("Starting server at {}:{}".format(host, port))
     return Server(
         host,
@@ -456,4 +494,5 @@ def create_server(host, port, in_memory=False, default_bucket=None, data_dir=Non
         in_memory=in_memory,
         default_bucket=default_bucket,
         data_dir=data_dir,
+        cors=cors,
     )

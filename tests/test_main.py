@@ -76,3 +76,30 @@ class MainHttpEndpointsTest(ServerBaseCase):
         response = requests.get(url)
         self.assertEqual(response.status_code, 501)
         self.assertEqual(response.content, "".encode("utf-8"))
+
+    def test_options(self):
+        url = self._url("/")
+        response = requests.options(url)
+        self.assertEqual(response.status_code, 204)
+
+
+class ServerCORSBaseCase(ServerBaseCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._server = main(["start", "--port=9099", "--cors"], True)
+        cls._server.start()
+
+
+class CORSHttpEndpointTest(ServerCORSBaseCase):
+    """Tests for the CORS in HTTP endpoints."""
+
+    def _url(self, path):
+        return os.environ["STORAGE_EMULATOR_HOST"] + path
+
+    def test_cors_headers(self):
+        url = self._url("/")
+        response = requests.options(url)
+        self.assertEqual(response.status_code, 204)
+        self.assertIn("access-control-allow-methods", response.headers)
+        self.assertIn("access-control-allow-origin", response.headers)
+        self.assertIn("access-control-allow-methods", response.headers)

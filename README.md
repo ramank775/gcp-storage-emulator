@@ -41,6 +41,7 @@ If you're using the Google client library (e.g. `google-cloud-storage` for Pytho
 export STORAGE_EMULATOR_HOST=http://localhost:9023
 ```
 
+If you're using the emulator in browser enviroment or cors enabled enviroment, you can use `--cors` parameter to enable server to add cors headers in response.
 
 ### Wiping data
 
