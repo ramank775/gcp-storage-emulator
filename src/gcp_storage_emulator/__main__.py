@@ -14,8 +14,12 @@ DEFAULT_PORT = int(os.environ.get("PORT", 9023))
 DEFAULT_HOST = os.environ.get("HOST", "localhost")
 
 
-def get_server(host, port, memory=False, default_bucket=None, data_dir=None):
-    server = create_server(host, port, memory, default_bucket, data_dir=data_dir)
+def get_server(
+    host, port, memory=False, default_bucket=None, data_dir=None, cors=False
+):
+    server = create_server(
+        host, port, memory, default_bucket, data_dir=data_dir, cors=cors
+    )
     return server
 
 
@@ -60,6 +64,12 @@ def prepare_args_parser():
         action="store_true",
         default=False,
         help="use in-memory storage",
+    )
+    start.add_argument(
+        "--cors",
+        action="store_true",
+        default=False,
+        help="If provided cors headers will be returned in api response",
     )
 
     wipe = subparsers.add_parser("wipe", help="Wipe the local data")
@@ -110,7 +120,12 @@ def main(args=sys.argv[1:], test_mode=False):
     else:
         root.setLevel(logging.DEBUG)
     server = get_server(
-        args.host, args.port, args.no_store_on_disk, args.default_bucket, args.data_dir
+        args.host,
+        args.port,
+        args.no_store_on_disk,
+        args.default_bucket,
+        args.data_dir,
+        args.cors,
     )
     if test_mode:
         return server
