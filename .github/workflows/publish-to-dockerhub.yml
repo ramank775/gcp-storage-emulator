@@ -32,8 +32,8 @@ jobs:
         platforms: linux/amd64,linux/arm64
         push: true
         tags: |
-          oittaa/gcp-storage-emulator:latest
-          oittaa/gcp-storage-emulator:${{ github.event.release.tag_name }}
+          ramank775/gcp-storage-emulator:latest
+          ramank775/gcp-storage-emulator:${{ github.event.release.tag_name }}
         cache-from: type=local,src=/tmp/.buildx-cache
         cache-to: type=local,dest=/tmp/.buildx-cache
     - name: Image digest

@@ -23,11 +23,11 @@ jobs:
         with:
           push: false
           load: true
-          tags: oittaa/gcp-storage-emulator:latest
+          tags: ramank775/gcp-storage-emulator:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
       - name: Docker container up
-        run: docker run -d --rm -p 8080:8080 --name gcp-storage-emulator oittaa/gcp-storage-emulator
+        run: docker run -d --rm -p 8080:8080 --name gcp-storage-emulator ramank775/gcp-storage-emulator
       - name: Wait 10 seconds
         run: sleep 10
       - name: Check running containers

@@ -1,8 +1,9 @@
+** Note this is a fork from [oittaa/gcp-storage-emulator](https://github.com/ramank775/gcp-storage-emulator). This branch is only used for releasing custom release **
 # Local Emulator for Google Cloud Storage
 
-[![CI](https://github.com/oittaa/gcp-storage-emulator/actions/workflows/main.yml/badge.svg)](https://github.com/oittaa/gcp-storage-emulator/actions/workflows/main.yml)
+[![CI](https://github.com/ramank775/gcp-storage-emulator/actions/workflows/main.yml/badge.svg)](https://github.com/ramank775/gcp-storage-emulator/actions/workflows/main.yml)
 [![PyPI](https://img.shields.io/pypi/v/gcp-storage-emulator.svg)](https://pypi.org/project/gcp-storage-emulator/)
-[![codecov](https://codecov.io/gh/oittaa/gcp-storage-emulator/branch/main/graph/badge.svg?token=GpiSgoXsGL)](https://codecov.io/gh/oittaa/gcp-storage-emulator)
+[![codecov](https://codecov.io/gh/ramank775/gcp-storage-emulator/branch/main/graph/badge.svg?token=GpiSgoXsGL)](https://codecov.io/gh/ramank775/gcp-storage-emulator)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Google doesn't (yet) ship an emulator for the Cloud Storage API like they do for
@@ -18,7 +19,7 @@ having to connect to the production Storage APIs.
 
 ## Installation
 
-`pip install gcp-storage-emulator`
+`pip install git+https://github.com/ramank775/gcp-storage-emulator@release`
 
 
 ## CLI Usage
@@ -114,7 +115,7 @@ server.stop()
 Pull the Docker image.
 
 ```bash
-docker pull oittaa/gcp-storage-emulator
+docker pull ramank775/gcp-storage-emulator
 ```
 
 Inside the container instance, the value of the `PORT` environment variable always reflects the port to which requests are sent. It defaults to `8080`. The directory used for the emulated storage is located under `/storage` in the container. In the following example the host's directory `$(pwd)/cloudstorage` will be bound to the emulated storage.
@@ -125,7 +126,7 @@ docker run -d \
   -p 9023:9023 \
   --name gcp-storage-emulator \
   -v "$(pwd)/cloudstorage":/storage \
-  oittaa/gcp-storage-emulator
+  ramank775/gcp-storage-emulator
 ```
 
 ```python
